@@ -57,3 +57,14 @@ jobs:
       - name: Tests
         working-directory: work/pg
         run: FI_DRIVER=generic vendor/bin/phpunit
+
+      # phasync/phasync (from Packagist) bundles prebuilt extension binaries; the adapter behaves
+      # differently with the extension loaded, so run the suite again with it.
+      - name: Tests, phasync extension loaded
+        if: matrix.runtime == 'phasync'
+        working-directory: work/pg
+        run: |
+          v=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+          so=$PWD/vendor/phasync/phasync/ext/phasync-$v-nts-x86_64-glibc.so
+          test -f "$so"
+          FI_DRIVER=generic php -d extension=$so vendor/bin/phpunit
