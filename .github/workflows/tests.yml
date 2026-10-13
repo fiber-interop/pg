@@ -1,0 +1,59 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [revolt, amp, react, phasync, swoole]
+    env:
+      FI_RUNTIME: ${{ matrix.runtime }}
+      PG_DSN: host=127.0.0.1 port=15432 user=fi password=fi dbname=fi
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: fi, POSTGRES_PASSWORD: fi, POSTGRES_DB: fi }
+        ports: ['15432:5432']
+        options: >-
+          --health-cmd "pg_isready -U fi" --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      # composer.json uses path repositories to ../api, ../scope and the adapters, so every repo is
+      # checked out as a sibling in work/ (same trick as fiber-interop.github.io's pages workflow).
+      - uses: actions/checkout@v4
+        with: { path: work/pg }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/api, path: work/api, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/scope, path: work/scope, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/revolt, path: work/revolt, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/amp, path: work/amp, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/react, path: work/react, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/phasync, path: work/phasync, fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: fiber-interop/swoole, path: work/swoole, fetch-depth: 0 }
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pgsql, mbstring${{ matrix.runtime == 'swoole' && ', swoole' || '' }}
+          tools: composer
+          coverage: none
+
+      - name: Install
+        working-directory: work/pg
+        run: composer update --no-interaction --no-progress
+
+      # No adapter ships a native async\pg driver, so SocketDriver is the only pass.
+      - name: Tests
+        working-directory: work/pg
+        run: FI_DRIVER=generic vendor/bin/phpunit
