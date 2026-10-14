@@ -1,6 +1,6 @@
 # fiber-interop/pg
 
-Cooperative `pg_query()`, `pg_query_params()` and `pg_connect()` for
+Cooperative `pg_query()`, `pg_query_params()`, `pg_prepare()`, `pg_execute()` and `pg_connect()` for
 [fiber-interop/api](https://github.com/fiber-interop/api): inside `async\run()` a query suspends only
 the calling task, on whichever adapter is installed.
 
@@ -29,6 +29,9 @@ $rows = run(fn() => await_all(array_map(
   `pg_last_error($c)` set; the connection stays usable after a failed query. Outside `async\run()`
   they are the plain blocking functions. Inside, a failure raises no warning (the original emits
   "Query failed").
+- `async\pg\prepare(\PgSql\Connection $c, string $name, string $sql): \PgSql\Result|false` and
+  `async\pg\execute(\PgSql\Connection $c, string $name, array $params): \PgSql\Result|false` —
+  the same for `pg_prepare()` / `pg_execute()`, sent with `pg_send_prepare()` / `pg_send_execute()`.
 - `async\pg\start(\PgSql\Connection $c, string $sql, ?array $params = null): object` — sends the query
   now and returns an awaitable (repeatable `async\await()`) resolving to what `query()` (or
   `query_params()` when `$params` is given) returns. `query()` is `await(start())`.

@@ -20,14 +20,32 @@ final class SocketDriver implements Driver
 
     public function start(\PgSql\Connection $c, string $sql, ?array $params = null): object
     {
+        return $this->run($c, $params === null
+            ? fn() => \pg_send_query($c, $sql)
+            : fn() => \pg_send_query_params($c, $sql, $params));
+    }
+
+    public function prepare(\PgSql\Connection $c, string $name, string $sql): object
+    {
+        return $this->run($c, fn() => \pg_send_prepare($c, $name, $sql));
+    }
+
+    public function execute(\PgSql\Connection $c, string $name, array $params): object
+    {
+        return $this->run($c, fn() => \pg_send_execute($c, $name, $params));
+    }
+
+    /** @param \Closure(): bool $send */
+    private function run(\PgSql\Connection $c, \Closure $send): object
+    {
         $q = new Query();
         $prev = $this->tail[$c] ?? null;
         $this->tail[$c] = $q;
-        $sent = $prev === null && self::send($c, $sql, $params);
-        \async\go(function () use ($c, $sql, $params, $q, $prev, $sent) {
+        $sent = $prev === null && $send();
+        \async\go(function () use ($c, $send, $q, $prev, $sent) {
             if ($prev !== null) {
                 \async\await($prev);
-                $sent = self::send($c, $sql, $params);
+                $sent = $send();
             }
             try {
                 $q->resolve($sent ? self::wait($c) : false);
@@ -40,10 +58,6 @@ final class SocketDriver implements Driver
         return $q;
     }
 
-    private static function send(\PgSql\Connection $c, string $sql, ?array $params): bool
-    {
-        return $params === null ? \pg_send_query($c, $sql) : \pg_send_query_params($c, $sql, $params);
-    }
 
     /** Wait for the reply; return the last result as pg_query() would (false on an error status). */
     private static function wait(\PgSql\Connection $c): \PgSql\Result|false

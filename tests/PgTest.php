@@ -133,4 +133,25 @@ final class PgTest extends TestCase
         $this->assertFalse(run(fn() => \async\pg\connect('host=127.0.0.1 port=1 connect_timeout=2')));
         $this->assertInstanceOf(\PgSql\Connection::class, \async\pg\connect(PG_DSN));
     }
+
+    public function testPrepareExecute(): void
+    {
+        $c = self::conn();
+        $this->assertNotFalse(\async\pg\prepare($c, 'p0', 'SELECT $1::int * 2'));
+        $this->assertSame('8', self::one(\async\pg\execute($c, 'p0', [4])));
+        [$a, $b, $t] = run(function () use ($c) {
+            $c2 = self::conn();
+            $this->assertNotFalse(\async\pg\prepare($c2, 's', 'SELECT $1::int FROM pg_sleep(0.2)'));
+            $t = microtime(true);
+            $tasks = [go(fn() => self::one(\async\pg\execute($c, 'p0', [21]))),
+                go(fn() => self::one(\async\pg\execute($c2, 's', [5])))];
+            [$a, $b] = await_all($tasks);
+            return [$a, $b, microtime(true) - $t];
+        });
+        $this->assertSame(['42', '5'], [$a, $b]);
+        $this->assertLessThan(0.35, $t);
+        $this->assertFalse(run(fn() => \async\pg\prepare($c, 'bad', 'SELEC 1')));
+        $this->assertStringContainsString('syntax error', pg_last_error($c));
+        $this->assertFalse(run(fn() => \async\pg\execute($c, 'nope', [])));
+    }
 }

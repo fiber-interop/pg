@@ -34,6 +34,32 @@ function query_params(\PgSql\Connection $c, string $sql, array $params): \PgSql\
 }
 
 /**
+ * Same contract as pg_prepare($c, $name, $sql): a result, or false with pg_last_error($c) set.
+ * Inside async\run() only the calling task waits (pg_send_prepare()); outside run() this is a
+ * plain blocking pg_prepare().
+ */
+function prepare(\PgSql\Connection $c, string $name, string $sql): \PgSql\Result|false
+{
+    if (\async\Registry::$active === []) {
+        return \pg_prepare($c, $name, $sql);
+    }
+    return \async\await(driver()->prepare($c, $name, $sql));
+}
+
+/**
+ * Same contract as pg_execute($c, $name, $params): a result, or false with pg_last_error($c)
+ * set. Inside async\run() only the calling task waits (pg_send_execute()); outside run() this
+ * is a plain blocking pg_execute().
+ */
+function execute(\PgSql\Connection $c, string $name, array $params): \PgSql\Result|false
+{
+    if (\async\Registry::$active === []) {
+        return \pg_execute($c, $name, $params);
+    }
+    return \async\await(driver()->execute($c, $name, $params));
+}
+
+/**
  * Send the query now (or queue it behind the connection's running query) and return an
  * awaitable that resolves to what query() / query_params() would return. Pass $params to use
  * pg_query_params() semantics. Outside async\run() the query completes before start() returns.
